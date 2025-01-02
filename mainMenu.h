@@ -11,7 +11,7 @@ void game_menu();
 void profile_menu();
 void score_table();
 
-int main(){
+void mainMenu(){
     initscr();            
     clear();
     noecho();
@@ -91,7 +91,6 @@ int main(){
         }
     }
     endwin();
-    return 0;
 }
 
 void print_menu(WINDOW *menu_win, int highlight) {
