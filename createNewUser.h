@@ -11,7 +11,7 @@ int is_username_taken(const char *username);
 int validate_password(const char *password);
 int validate_email(const char *email);
 void save_user(const char *username, const char *password, const char *email);
-void create_new_user(WINDOW *menu) {
+void create_new_user(WINDOW *menu){
     char username[50], password[50], email[50];
     int valid = 0;
     curs_set(1);
@@ -129,6 +129,17 @@ void save_user(const char *username, const char *password, const char *email) {
     FILE *file = fopen("users.txt", "a");
     fprintf(file, "%s,%s,%s\n", username, password, email);
     fclose(file);
+    FILE *file2 = fopen("scores.txt", "a");
+    fprintf(file2, "%d\n", 0);
+    fclose(file2);
+    FILE *file3 = fopen("Counter.txt", "r");
+    short num = fscanf(file3, "%d", &num);
+    fclose(file3);
+    num++;
+    mvprintw(10, 10, "%d", num);
+    FILE *file1 = fopen("Counter.txt", "w");
+    fprintf(file1, "%d", num);
+    fclose(file1);
 }
 
 #endif

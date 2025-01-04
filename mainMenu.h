@@ -1,3 +1,6 @@
+#ifndef MAINMENU
+#define MAINMENU
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -6,10 +9,10 @@
 #include "createNewUser.h"
 #include "userLogin.h"
 
-void print_menu(WINDOW *menu_win, int highlight);
+void print_menu(WINDOW *menu_win, int highlight, int height, int width);
 void game_menu();
 void profile_menu();
-void score_table();
+void score_table(int width, WINDOW *menu_win);
 
 void mainMenu(){
     initscr();            
@@ -17,10 +20,10 @@ void mainMenu(){
     noecho();
     cbreak();
     start_color();
-    curs_set(0);        
-
+    curs_set(0);
+    mvprintw(8, 10, "Welcome! I hope you enjoy this game!");        
     int startx = 0, starty = 0;
-    int width = 40, height = 10;
+    int width, height;
     int highlight = 1;
     int choice = 0;
     int c;
@@ -40,7 +43,7 @@ void mainMenu(){
     while (1){
         curs_set(0);
         noecho();
-        print_menu(menu_win, highlight);
+        print_menu(menu_win, highlight, height, width);
         c = wgetch(menu_win);
         switch (c){
             case KEY_UP:
@@ -82,7 +85,7 @@ void mainMenu(){
                     break;
                 case 5:
                     clear();
-                    score_table();
+                    score_table(width, menu_win);
                     break;
                 default:
                     break;
@@ -93,11 +96,11 @@ void mainMenu(){
     endwin();
 }
 
-void print_menu(WINDOW *menu_win, int highlight) {
-    int x = 75, y = 8;
+void print_menu(WINDOW *menu_win, int highlight, int height, int width) {
+    int x = width / 2, y = height / 2 - 2;
     box(menu_win, 0, 0);
 
-    char *choices[] = {
+    char *choices[] ={
         "1. Create New User",
         "2. Log In",
         "3. Game Menu",
@@ -111,9 +114,9 @@ void print_menu(WINDOW *menu_win, int highlight) {
             wattron(menu_win, A_REVERSE);
             mvwprintw(menu_win, y, x, "%s", choices[i]);
             wattroff(menu_win, A_REVERSE);
-        } else {
-            mvwprintw(menu_win, y, x, "%s", choices[i]);
         }
+        else
+            mvwprintw(menu_win, y, x, "%s", choices[i]);
         y++;
     }
     wrefresh(menu_win);
@@ -127,6 +130,32 @@ void game_menu(){
     getch();
 }
 
-void score_table(){
+void score_table(int width, WINDOW *menu_win){
     getch();
+    clear();
+    FILE *file = fopen("Counter.txt", "r");
+    short num = fscanf(file, "%d", &num);
+    short scores_sort[num], t, index = 0;
+    fclose(file);
+    file = fopen("scores.txt", "r");
+    while (fscanf(file, "%d", &t) == 1)
+        scores_sort[index++] = t;
+    for (int i = 0; i < num; i++){
+        for (int j = 0; j < num - 1; j++){
+            if (scores_sort[j] < scores_sort[j + 1]){
+                int temp = scores_sort[j];
+                scores_sort[j] = scores_sort[j + 1];
+                scores_sort[j + 1] = temp;
+            }
+        }
+    }
+    start_color();
+    init_pair(1, COLOR_BLUE, COLOR_BLACK);
+    attron(COLOR_PAIR(1));
+    for (int i = 0; i < num; i++){
+        mvwprintw(menu_win, 2 * i + 2, width/2, "%d", scores_sort[i]);
+        refresh();
+    }
 }
+
+#endif
