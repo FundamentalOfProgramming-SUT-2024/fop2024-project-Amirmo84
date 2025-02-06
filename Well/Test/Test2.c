@@ -9,6 +9,33 @@
 #include <locale.h>
 #include <unistd.h>
 
+// void play_music(const char *file) {
+//     if(Mix_OpenAudio(44100, MIX_DEFAULT_FORMAT, 2, 2048) < 0) printf("mamas");
+//     Mix_Music *music = Mix_LoadMUS(file);
+//     if (!music) {
+//         printw("Error loading music: %s", Mix_GetError());
+//         return;
+//     }
+//     Mix_PlayMusic(music, -1);  // Loop indefinitely
+// }
+
+void playMusic(char *musicName)
+{
+    curs_set(0);
+    char tempMessage[128];
+    snprintf(tempMessage, sizeof(tempMessage), "mpg123 --no-control -q %s.mp3 &", musicName);
+    system(tempMessage);
+}
+
+void killMusic()
+{
+    curs_set(0);
+    system("pkill mpg123");
+}
+
+bool music = TRUE;
+char current_song[30] = "music";
+
 #define MAX_SIZE 100
 #define HEIGHT 30
 #define WIDTH 120
@@ -19,7 +46,7 @@
 #define MAX_TRAP 3
 #define MAX_FOOD 3
 #define LOCKED_PASS_LEN 4
-#define PASS_TIMEOUT 10
+#define PASS_TIMEOUT 5
 #define MAX_HEALTH 100
 #define HEALTH_R 1
 #define HUNGER_R 5
@@ -55,6 +82,11 @@ struct secret_door {
 struct trap {
     int x, y;
     int state;
+};
+
+struct window {
+    int x, y;
+    int index;
 };
 
 struct food {
@@ -122,6 +154,9 @@ int secret_door_count = 0;
 
 struct trap traps [50];
 int traps_count = 0;
+
+struct window windows[50];
+int window_count = 0;
 
 int level = 1;
 bool master_key [5] = {};
@@ -194,6 +229,7 @@ void hall_of_fame();
 void display_hits();
 void elixir_of_everlife();
 void dragon_blood ();
+void generate_random();
 void storm_kiss ();
 void lobby_art();
 void main_menu();
@@ -494,6 +530,10 @@ void messages(char *what_happened, int maybe) {
         attron(COLOR_PAIR(9));
         printw("Welcome to level %d!", level);
         attroff(COLOR_PAIR(9));
+    } else if (strcmp(what_happened, "Pre") == 0){
+        attron(COLOR_PAIR(9));
+        printw("Welcome back to level %d!", level);
+        attroff(COLOR_PAIR(9));
     }
     move(0,0);
     getch();
@@ -522,7 +562,7 @@ char *generatePassword(){
         genPass[randindex] = temp;
     }
     genPass[lenPass] = '\0';
-    int win_width = 50;
+    int win_width = 40;
     int win_height = 12;
 
     int rows, cols;
@@ -606,6 +646,7 @@ void difficulty() {
             }
         }
     }
+    werase(menu_win);
     delwin(menu_win);
 }
 
@@ -681,6 +722,7 @@ void customize_menu() {
             }
         }
     }
+    werase(menu_win);
     delwin(menu_win);
 }
 
@@ -903,7 +945,32 @@ void add_trap (struct ROOM room) {
     }
 }
 
-void add_stairs (struct ROOM room) {
+void add_window(struct ROOM room, int t){
+    for (int i = room.x + 1; i < room.x + room.width - 1; i++){
+        if (!(rand() % 15) && map[room.y][i] == '-'){
+            windows[window_count].x = i;
+            windows[window_count].index = t;
+            windows[window_count++].y = 0;
+            if (rand() % 2)
+                map[room.y][i] = '=';
+            else
+                map[room.y + room.height - 1][i] = '=';
+        }
+    }
+    for (int i = room.y + 1; i < room.y + room.height - 1; i++){
+        windows[window_count].y = i;
+        windows[window_count].index = t;
+        windows[window_count++].x = 0;
+        if (!(rand() % 15) && map[i][room.x] == '-'){
+            if (rand() % 2)
+                map[i][room.x] = '=';
+            else
+                map[i][room.x + room.width - 1] = '=';
+        }
+    }
+}
+
+void add_stairs (struct ROOM room, int t) {
     bool stairs_placed = false;
     for (int y = room.y; y < room.y + room.height; y++) {
         if (stairs_placed) return;
@@ -911,7 +978,10 @@ void add_stairs (struct ROOM room) {
             if (stairs_placed) return;
             if (rand () % 20 == 0 && map[y][x] == '.') {
                 attron(COLOR_PAIR(9));
-                map[y][x] = '<';
+                if (t)
+                    map[y][x] = '<';
+                else
+                    map[y][x] = '>';
                 attroff(COLOR_PAIR(9));
                 stairs_placed = true;
                 refresh();
@@ -919,12 +989,16 @@ void add_stairs (struct ROOM room) {
             }
         }
     }
-    
+    attron(COLOR_PAIR(9));
     if (!stairs_placed) {
         int center_x = room.x + room.width / 2;
         int center_y = room.y + room.height / 2;
-        map[center_y][center_x] = '<';
+        if (t)
+            map[center_y][center_x] = '<';
+        else
+            map[center_y][center_x] = '>';
     }
+    attroff(COLOR_PAIR(9));
 }
 
 void reveal_door (int ny, int nx) {
@@ -1527,6 +1601,9 @@ void player_in_room (int px, int py, struct ROOM rooms[], int room_count) {
             reveal_room(room);
         }
     }
+    // for (int i = 0; i < window_count; i++){
+    //     if (windows[i].index == )
+    // }
     reveal_corridor(px, py);
     
     //while_inside_room(px, py, room);
@@ -1628,13 +1705,29 @@ void render_map() {
 void new_level () {
     level++;
     messages("new level", 0);
+    room_count[level] = 0;
+    for (int i = 0; i < 6; i++)
+        memset(&rooms[level][i], 0, sizeof(struct ROOM));
     init_map();
+    //generate_random();
     generate_map();
 }
 
 void stair_activated (char stair) {
     if ( stair == '>') {
         new_level();
+    }
+}
+
+void active_2 (char stair){
+    if (stair == '<'){
+        level--;
+        messages("Pre", 0);
+        init_map();
+        room_count[level] = 0;
+        for (int i = 0; i < 6; i++)
+            memset(&rooms[level][i], 0, sizeof(struct ROOM));
+        generate_map();
     }
 }
 
@@ -1736,18 +1829,20 @@ void dagger_wand_arrow_attack(int px, int py, char *direction, int type) {
     else if (strcmp(direction, "dr") == 0) { dx = +1; dy = +1; }
 
     bool weapon_used = false;
-
+    char temp = '@';
     for (int i = 1; i <= distance; i++) {
         int new_x = px + i * dx;
         int new_y = py + i * dy;
 
         if (new_x < 0 || new_x >= WIDTH || new_y < 0 || new_y >= HEIGHT) {
             drop_weapon(px + (i - 1) * dx, py + (i - 1) * dy, weapon_in_hand);
+            //while (new_x < 0 || new_x >= WIDTH || new_y < 0 || new_y >= HEIGHT)
             return;
         }
 
         if (map[new_y][new_x] == '|' || map[new_y][new_x] == '-' || map[new_y][new_x] == '#') {
             drop_weapon(px + (i - 1) * dx, py + (i - 1) * dy, weapon_in_hand);
+            //
             return;
         }
 
@@ -1758,6 +1853,11 @@ void dagger_wand_arrow_attack(int px, int py, char *direction, int type) {
                 return;
             }
         }
+        map[new_y - dy][new_x - dx] = temp;
+        temp = map[new_y][new_x];
+        map[new_y][new_x] = symbol;
+        render_map();
+        usleep(100000);
     }
 
     if (!weapon_used) {
@@ -2893,18 +2993,22 @@ void fix_edges(struct ROOM room) {
     }
 }
 
-void generate_random (){
+// void resetLevel(int level){
+//     room_count[level] = 0;
+// }
+
+void generate_map (){
     clear();
     curs_set(0);
     bool treasure_room_place = false;
     init_map();
-    while (room_count[level] < ROOM_COUNT) {
+    while (room_count[level] < ROOM_COUNT){
         int type = 0;
         struct ROOM new_room;
         new_room.width = ROOM_MIN_SIZE + rand() % (ROOM_MAX_SIZE - ROOM_MIN_SIZE + 1);
         new_room.height = ROOM_MIN_SIZE + rand() % (ROOM_MAX_SIZE - ROOM_MIN_SIZE + 1);
-        new_room.x = rand() % (WIDTH - new_room.width - 1);
-        new_room.y = rand() % (HEIGHT - new_room.height - 1);
+        new_room.x = rand() % (WIDTH - new_room.width - 1) + 1;
+        new_room.y = rand() % (HEIGHT - new_room.height - 1) + 1;
         
         bool overlap = false;
         
@@ -2948,6 +3052,7 @@ void generate_random (){
                 for (int x = new_room.x + 1 ; x < new_room.x + new_room.width - 1; x++)
                     if (map[y][x] == '+') map[y][x] = '.';
             }
+            add_window(new_room, room_count[level]);
             rooms[level][room_count[level]++] = new_room;
         }
     }
@@ -2963,19 +3068,37 @@ void generate_random (){
     
     int room_with_stairs = rand () % 5 + 1;
     int room_with_key = rand () % 6;
+    if (level > 1)
+        add_stairs(rooms[level][0], 0);
     if (level < 4)
-        add_stairs(rooms[level][room_with_stairs]);
+        add_stairs(rooms[level][room_with_stairs], 1);
     add_master_key(rooms[level][room_with_key]);
     if (rand() % 4 == 0)
         locked_door(rooms[level][0]);
-}
-void generate_map(){
+    
     int px = rooms[level][0].x + 1, py = rooms[level][0].y + 1;
-    if (resume){
-        px = pxx;
-        py = pyy;
-    }
+    // if (resume){
+    //     px = pxx;
+    //     py = pyy;
+    // }
     player_in_room(px, py, rooms[level], room_count[level]);
+    struct ROOM room;
+    for (int i = 0; i < 6; i++) {
+        room = rooms[level][i];
+        if (px >= room.x && px < room.x + room.width &&
+            py >= room.y && py < room.y + room.height) {
+            killMusic();
+            if (room.type == 1)
+                strcpy(current_song, "lalaee");
+            else if (room.type == 0)
+                strcpy(current_song, "fur_elise");
+            else
+                stpcpy(current_song, "music");
+            playMusic(current_song);
+            music = true;
+            break;
+        }
+    }
     int ch;
     while (1) {
         //g_state = 0;
@@ -3112,9 +3235,43 @@ void generate_map(){
             px = nx;
             py = ny;
             player_in_room(px, py, rooms[level], room_count[level]);
+            struct ROOM room;
+            if (map[ny][nx] == '+' || map[ny][nx] == '?'){
+                for (int i = 0; i < 6; i++) {
+                    room = rooms[level][i];
+                    if (px >= room.x && px < room.x + room.width &&
+                    py >= room.y && py < room.y + room.height) {
+                        //if ((room.type != 1 || strcmp(current_song, "lalaee") != 0) && (room.type != 0 || strcmp(current_song, "fur_elise") != 0) && (room.type != 2 || strcmp(current_song, "music") != 0))
+                        //else{
+                            if (room.type == 1 && strcmp(current_song, "lalaee") != 0){
+                                killMusic();
+                                strcpy(current_song, "lalaee");
+                                playMusic(current_song);
+                            }
+                            else if (room.type == 0 && strcmp(current_song, "fur_elise") != 0){
+                                killMusic();
+                                strcpy(current_song, "fur_elise");
+                                playMusic(current_song);
+                            }
+                            else if (room.type == 2){
+                                killMusic();
+                                stpcpy(current_song, "music");
+                                playMusic(current_song);
+                            }
+                            music = true;
+                        //}
+                    }
+                }
+            }
         } else if (map[ny][nx] == '<') {
             char enter = getch();
             stair_activated(enter);
+            px = nx;
+            py = ny;
+        }
+        else if (map[ny][nx] == '>'){
+            char enter = getch();
+            active_2(enter);
             px = nx;
             py = ny;
         }
@@ -3230,6 +3387,71 @@ void generate_map(){
     curs_set(1);
 }
 
+void setting_menu();
+void start_game_menu();
+
+void music_menu(){
+    int rows, cols;
+    getmaxyx(stdscr, rows, cols);
+    int ch;
+    int choice = 0;
+    int win_width = 40;
+    int win_height = 12;
+    int start_y = (rows - win_height) / 2;
+    int start_x = (cols - win_width) / 2;
+
+    WINDOW *menu_win = newwin(win_height, win_width, start_y, start_x);
+    char *options[] = {"Stop/Start current song", "Lalaee", "Fur_Elise", "Exit"};
+    char menu_name[50] = {"** MUSIC MENU **"};
+    box(menu_win, 0, 0);
+    while (1){
+        wclear(menu_win);
+        box(menu_win, 0, 0);
+        curs_set(0);
+        for (int i = 0; i < 4; i++) {
+            if (i == choice) {
+                wattron(menu_win, COLOR_PAIR(4));
+                mvwprintw(menu_win, 3 + i, (win_width - strlen(options[i])) / 2, "%s", options[i]);
+                wattroff(menu_win, COLOR_PAIR(4));
+            } else {
+                mvwprintw(menu_win, 3 + i, (win_width - strlen(options[i])) / 2, "%s", options[i]);
+            }
+        }
+        
+        wrefresh(menu_win);
+        ch = getch();
+        if (ch == KEY_UP && choice > 0) choice--;
+        else if (ch == KEY_DOWN && choice < 3) choice++;
+        else if (ch == '\n'){
+            if (choice == 0){
+                if (music)
+                    killMusic();
+                else
+                    playMusic(current_song);
+                music = !music;
+            }
+            else if (choice == 1){
+                if (music)
+                    killMusic();
+                strcpy(current_song, "lalaee");
+                playMusic(current_song);
+                music = TRUE;
+            }
+            else if (choice == 2){
+                if (music)
+                    killMusic();
+                strcpy(current_song, "fur_elise");
+                playMusic(current_song);
+                music = TRUE;
+            }
+            else if (choice == 3)
+                break;
+        }
+    }
+    werase(menu_win);
+    delwin(menu_win);
+    setting_menu();
+}
 
 void setting_menu() {
     int ch;
@@ -3281,14 +3503,16 @@ void setting_menu() {
                 refresh();
             } else if (choice == 2) {
                 //clear();
+                music_menu();
                 refresh();
             } else if (choice == 3) {
-               // clear();
+                //music_menu();
                 refresh();
                 break;
             }
         }
     }
+    start_game_menu();
     delwin(menu_win);
 }
 
@@ -3350,6 +3574,8 @@ void show_profile () {
     wrefresh(win);
     
     wgetch(win);
+    werase(profile);
+    werase(win);
     delwin(profile);
     delwin(win);
 }
@@ -3398,7 +3624,7 @@ void start_game_menu() {
                 reset_game();
                 init_map();
                 resume = false;
-                generate_random();
+                //generate_random();
                 generate_map();
                 getch();
                 refresh();
@@ -3423,7 +3649,7 @@ void start_game_menu() {
             }
         }
     }
-    
+    werase(menu_win);
     delwin(menu_win);
 }
 
@@ -3498,7 +3724,7 @@ bool validate_username(char* username, char* password) {
                 fgets(line, sizeof(line), file);
                 sscanf(line, "Password: %s", stored_pass);
                 fclose(file);
-                return strcmp(stored_pass, password) == 0;
+                return (strcmp(stored_pass, password) == 0);
             }
         }
     }
@@ -3519,12 +3745,6 @@ void get_info(const char* prompt, char* dest, int max_length, int pass, int mayb
     box(win, 0, 0);
 
     int prompt_len = strlen(prompt);
-    // if (maybe == 1){
-    //     mvwprintw(win, 1, (win_width - prompt_len) / 2, "%s    Press * if you want a generated password!", prompt);
-    //     wrefresh(win);
-    //     int c = getch();
-    //     if (c == '*')
-    //         char *passw = generatePassword();
     mvwprintw(win, 1, (win_width - prompt_len) / 2, "%s", prompt);
     wrefresh(win);
 
@@ -3555,6 +3775,7 @@ void get_info(const char* prompt, char* dest, int max_length, int pass, int mayb
 
     noecho();
     delwin(win);
+    werase(win);
 }
 
 void show_pop_up (char * pop_up, int gb, char * pass) {
@@ -3576,6 +3797,7 @@ void show_pop_up (char * pop_up, int gb, char * pass) {
     wattroff(popup, (COLOR_PAIR(color) | A_BOLD));
     wrefresh(popup);
     getch();
+    werase(popup);
     delwin(popup);
 }
 
@@ -3875,9 +4097,9 @@ void hall_of_fame() {
             cur_page--;
         }
     } while (ch != 'q' && ch != 'Q');
-
+    wclear(hall);
     delwin(hall);
-    clear();
+    //wclear();
     start_game_menu();
 }
 
@@ -4063,7 +4285,17 @@ int main() {
     srand(time(NULL));
     keypad(stdscr, TRUE);
     noecho();
+    playMusic("music");
+    // if (SDL_Init(SDL_INIT_AUDIO) < 0) {
+    //     printw("SDL_Init failed!");
+    // } else {
+    //     play_music("music.mp3");
+    // }
 
+    // while (getch() != 'q');
+
+    // Mix_CloseAudio();
+    // SDL_Quit();
     if (has_colors()) {
         start_color();
         init_colors();
@@ -4075,6 +4307,7 @@ int main() {
     lobby_art();
     main_menu();
     getch();
+    killMusic();
     endwin();
     return 0;
 }
