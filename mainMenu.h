@@ -21,7 +21,7 @@ void mainMenu(){
     cbreak();
     start_color();
     curs_set(0);
-    mvprintw(8, 10, "Welcome! I hope you enjoy this game!");        
+    mvprintw(8, 10, "Welcome! I hope you enjoy this game!");    
     int startx = 0, starty = 0;
     int width, height;
     int highlight = 1;
@@ -84,7 +84,6 @@ void mainMenu(){
                     profile_menu();
                     break;
                 case 5:
-                    clear();
                     score_table(width, menu_win);
                     break;
                 default:
@@ -131,19 +130,24 @@ void game_menu(){
 }
 
 void score_table(int width, WINDOW *menu_win){
-    getch();
     clear();
     FILE *file = fopen("Counter.txt", "r");
-    short num = fscanf(file, "%d", &num);
-    short scores_sort[num], t, index = 0;
+    short num;
+    if (fscanf(file, "%hd", &num) != 1 || num < 0){
+        fclose(file);
+        return;
+    }
     fclose(file);
+    short scores_sort[num];
     file = fopen("scores.txt", "r");
-    while (fscanf(file, "%d", &t) == 1)
+    int index = 0, t;
+    while (index < num && fscanf(file, "%d", &t) == 1)
         scores_sort[index++] = t;
+    fclose(file);
     for (int i = 0; i < num; i++){
         for (int j = 0; j < num - 1; j++){
             if (scores_sort[j] < scores_sort[j + 1]){
-                int temp = scores_sort[j];
+                short temp = scores_sort[j];
                 scores_sort[j] = scores_sort[j + 1];
                 scores_sort[j + 1] = temp;
             }
@@ -156,6 +160,9 @@ void score_table(int width, WINDOW *menu_win){
         mvwprintw(menu_win, 2 * i + 2, width/2, "%d", scores_sort[i]);
         refresh();
     }
+    refresh();
+    attroff(COLOR_PAIR(1));
+    getch();
 }
 
 #endif

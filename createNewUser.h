@@ -54,13 +54,13 @@ void create_new_user(WINDOW *menu){
             }
         }
         valid = 0;
-        wmove(menu, 5, 75);
-        wclrtobot(menu);
-        wrefresh(menu);
+        move(5, 75);
+        clrtobot();
+        refresh();
         while (!valid){
-            wmove(menu, 6, 0);
-            wclrtoeol(menu);
-            wrefresh(menu);
+            move(6, 0);
+            clrtoeol();
+            refresh();
             mvprintw(6, 75, "Enter Email: ");
             curs_set(1);
             echo();
@@ -133,10 +133,11 @@ void save_user(const char *username, const char *password, const char *email) {
     fprintf(file2, "%d\n", 0);
     fclose(file2);
     FILE *file3 = fopen("Counter.txt", "r");
-    short num = fscanf(file3, "%d", &num);
+    short num = 0;
+    if (fscanf(file3, "%hd", &num) != 1)
+        num = 0;
     fclose(file3);
     num++;
-    mvprintw(10, 10, "%d", num);
     FILE *file1 = fopen("Counter.txt", "w");
     fprintf(file1, "%d", num);
     fclose(file1);
